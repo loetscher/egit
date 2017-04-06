@@ -27,14 +27,22 @@ import org.eclipse.jgit.lib.Repository;
  * Action for pulling into the currently checked-out branch.
  */
 public class PullFromUpstreamActionHandler extends RepositoryActionHandler {
+
+	/**
+	 * Command parameter for configure a pull to do only a fetch and skip the
+	 * merge
+	 */
+	public static final String FETCH_ONLY = "org.eclipse.egit.ui.team.Pull.skipMerge"; //$NON-NLS-1$
 	@Override
 	public Object execute(ExecutionEvent event) throws ExecutionException {
 		Repository[] repos = getRepositories(event);
+		String fetchOnlyFlag = event.getParameter(FETCH_ONLY);
+		boolean doOnlyFetch = Boolean.parseBoolean(fetchOnlyFlag);
 		if (repos.length == 0)
 			return null;
 		Set<Repository> repositories = new LinkedHashSet<>(
 				Arrays.asList(repos));
-		new PullOperationUI(repositories).start();
+		new PullOperationUI(repositories, doOnlyFetch).start();
 		return null;
 	}
 

@@ -974,6 +974,11 @@
             categoryId="org.eclipse.egit.ui.commandCategory"
             id="org.eclipse.egit.ui.team.Pull"
             name="%TeamPullCommand.name">
+         <commandParameter
+               id="org.eclipse.egit.ui.team.Pull.skipMerge"
+               name="fetchOnly"
+               optional="true">
+         </commandParameter>
       </command>
       <command
             categoryId="org.eclipse.egit.ui.commandCategory"
@@ -1050,6 +1055,11 @@
             categoryId="org.eclipse.egit.ui.commandCategory"
             id="org.eclipse.egit.ui.team.Disconnect"
             name="%DisconnectCommand.name">
+      </command>
+      <command
+            categoryId="org.eclipse.egit.ui.commandCategory"
+            id="org.eclipse.egit.ui.team.MultiFetch"
+            name="MultiFetch">
       </command>
    </extension>
    <extension
@@ -2421,6 +2431,12 @@
             </with>
          </activeWhen>
       </handler>
+      <handler
+            commandId="org.eclipse.egit.ui.team.MultiFetch">
+         <class
+               class="org.eclipse.egit.ui.internal.actions.FetchFromUpstreamActionHandler">
+         </class>
+      </handler>
    </extension>
    <extension
          point="org.eclipse.ui.views">
@@ -2684,6 +2700,22 @@
                label="%RepoViewCheckout.label"
                style="push">
             <visibleWhen checkEnabled="true" />
+         </command>
+          <command
+               commandId="org.eclipse.egit.ui.team.MultiFetch"
+               icon="icons/obj16/fetch.png"
+               label="Multi Git-Fetch!"
+               style="push">
+         </command>
+       <command
+               commandId="org.eclipse.egit.ui.team.Pull"
+               icon="icons/obj16/fetch.png"
+               label="Multi Git-Fetch (based on pull)!"
+               style="push">
+          <parameter
+                name="org.eclipse.egit.ui.team.Pull.skipMerge"
+                value="true">
+          </parameter>
          </command>
          <command
                commandId="org.eclipse.egit.ui.team.Push"

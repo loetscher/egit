@@ -44,6 +44,7 @@ import org.eclipse.jface.viewers.ViewerComparator;
 import org.eclipse.jgit.api.PullResult;
 import org.eclipse.jgit.api.RebaseResult;
 import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.transport.FetchResult;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionAdapter;
@@ -82,15 +83,19 @@ public class MultiPullResultDialog extends Dialog {
 	private final RepositoryUtil utils = Activator.getDefault()
 			.getRepositoryUtil();
 
+	private final boolean skipMerge;
+
 	/**
 	 * @param parentShell
 	 * @param results
 	 *            maps {@link Repository}s to either {@link PullResult} or
 	 *            {@link IStatus}
+	 * @param skipMerge
 	 */
 	protected MultiPullResultDialog(Shell parentShell,
-			Map<Repository, Object> results) {
+			Map<Repository, Object> results, boolean skipMerge) {
 		super(parentShell);
+		this.skipMerge = skipMerge;
 		setShellStyle(getShellStyle() & ~SWT.APPLICATION_MODAL | SWT.SHELL_TRIM);
 		setBlockOnOpen(false);
 		this.results.putAll(results);
@@ -154,110 +159,163 @@ public class MultiPullResultDialog extends Dialog {
 		// fetch status
 		tc = new TableViewerColumn(tv, SWT.NONE);
 		col = tc.getColumn();
-		tc.setLabelProvider(new ColumnLabelProvider() {
-			@Override
-			public String getText(Object element) {
-				@SuppressWarnings("unchecked")
-				Entry<Repository, Object> item = (Entry<Repository, Object>) element;
-				if (item.getValue() instanceof IStatus)
-					return UIText.MultiPullResultDialog_UnknownStatus;
-				PullResult pullRes = (PullResult) item.getValue();
-				if (pullRes.getFetchResult() == null) {
-					return UIText.MultiPullResultDialog_NothingFetchedStatus;
-				} else if (pullRes.getFetchResult().getTrackingRefUpdates()
-						.isEmpty()) {
-					return UIText.MultiPullResultDialog_NothingUpdatedStatus;
-				} else {
-					int updated = pullRes.getFetchResult()
-							.getTrackingRefUpdates().size();
-					if (updated == 1) {
-						return UIText.MultiPullResultDialog_UpdatedOneMessage;
-					}
-					return NLS.bind(UIText.MultiPullResultDialog_UpdatedMessage,
-							Integer.valueOf(updated));
-				}
-			}
-		});
+		tc.setLabelProvider(createFetchStatusLabelProvider());
 		col.setText(UIText.MultiPullResultDialog_FetchStatusColumnHeader);
 		layout.setColumnData(col, new ColumnWeightData(200, 200));
 		createComparator(col, 1);
-		// update status
-		tc = new TableViewerColumn(tv, SWT.NONE);
-		col = tc.getColumn();
-		tc.setLabelProvider(new ColumnLabelProvider() {
-			@Override
-			public String getText(Object element) {
-				@SuppressWarnings("unchecked")
-				Entry<Repository, Object> item = (Entry<Repository, Object>) element;
-				if (item.getValue() instanceof IStatus) {
-					return UIText.MultiPullResultDialog_UnknownStatus;
-				}
-				PullResult pullRes = (PullResult) item.getValue();
-				if (pullRes.getMergeResult() != null) {
-					return NLS.bind(
-							UIText.MultiPullResultDialog_MergeResultMessage,
-							MergeResultDialog.getStatusText(
-									pullRes.getMergeResult().getMergeStatus()));
-				} else if (pullRes.getRebaseResult() != null) {
-					RebaseResult res = pullRes.getRebaseResult();
-					return NLS.bind(
-							UIText.MultiPullResultDialog_RebaseResultMessage,
-							RebaseResultDialog.getStatusText(res.getStatus()));
-				} else {
-					return UIText.MultiPullResultDialog_NothingUpdatedStatus;
-				}
-			}
-		});
-		col.setText(UIText.MultiPullResultDialog_UpdateStatusColumnHeader);
-		layout.setColumnData(col, new ColumnWeightData(200, 200));
-		createComparator(col, 2);
-		// overall status
-		tc = new TableViewerColumn(tv, SWT.NONE);
-		col = tc.getColumn();
-		tc.setLabelProvider(new ColumnLabelProvider() {
-			@Override
-			public Image getImage(Object element) {
-				@SuppressWarnings("unchecked")
-				Entry<Repository, Object> item = (Entry<Repository, Object>) element;
-				Object resultOrError = item.getValue();
-				if (resultOrError instanceof IStatus) {
-					return PlatformUI.getWorkbench().getSharedImages()
-							.getImage(ISharedImages.IMG_ELCL_STOP);
-				}
-				PullResult res = (PullResult) item.getValue();
-				boolean success = res.isSuccessful();
-				if (!success) {
-					return PlatformUI.getWorkbench().getSharedImages()
-							.getImage(ISharedImages.IMG_ELCL_STOP);
-				}
-				return null;
-			}
-
-			@Override
-			public String getText(Object element) {
-				@SuppressWarnings("unchecked")
-				Entry<Repository, Object> item = (Entry<Repository, Object>) element;
-				if (item.getValue() instanceof IStatus) {
-					IStatus status = (IStatus) item.getValue();
-					return status.getMessage();
-				}
-				PullResult res = (PullResult) item.getValue();
-				if (res.isSuccessful()) {
-					return UIText.MultiPullResultDialog_OkStatus;
-				} else {
-					return UIText.MultiPullResultDialog_FailedStatus;
-				}
-			}
-		});
-		col.setText(UIText.MultiPullResultDialog_OverallStatusColumnHeader);
-		layout.setColumnData(col, new ColumnWeightData(200, 200));
-		createComparator(col, 3);
+		if (!skipMerge) {
+			// update status
+			tc = new TableViewerColumn(tv, SWT.NONE);
+			col = tc.getColumn();
+			tc.setLabelProvider(createUpdateStatusProvider());
+			col.setText(UIText.MultiPullResultDialog_UpdateStatusColumnHeader);
+			layout.setColumnData(col, new ColumnWeightData(200, 200));
+			createComparator(col, 2);
+			// overall status
+			tc = new TableViewerColumn(tv, SWT.NONE);
+			col = tc.getColumn();
+			tc.setLabelProvider(createOverallStatusLabelProvider());
+			col.setText(UIText.MultiPullResultDialog_OverallStatusColumnHeader);
+			layout.setColumnData(col, new ColumnWeightData(200, 200));
+			createComparator(col, 3);
+		}
 
 		table.setHeaderVisible(true);
 		table.setLinesVisible(true);
 		tv.setInput(results.entrySet());
 		return main;
 	}
+
+	private ColumnLabelProvider createFetchStatusLabelProvider() {
+		return skipMerge ? new FetchResultStatusLabelProvider()
+				: new FetchResultStatusLabelProvider() {
+
+					@Override
+					public String getText(Object element) {
+						@SuppressWarnings("unchecked")
+						Entry<Repository, Object> item = (Entry<Repository, Object>) element;
+						if (item.getValue() instanceof IStatus)
+							return UIText.MultiPullResultDialog_UnknownStatus;
+						PullResult pullRes = (PullResult) item.getValue();
+						return this
+								.getFetchResultText(pullRes.getFetchResult());
+
+					}
+				};
+	}
+
+	private class FetchResultStatusLabelProvider extends ColumnLabelProvider {
+		@Override
+		public String getText(Object element) {
+			@SuppressWarnings("unchecked")
+			Entry<Repository, Object> item = (Entry<Repository, Object>) element;
+			if (item.getValue() instanceof IStatus)
+				return UIText.MultiPullResultDialog_UnknownStatus;
+			return this.getFetchResultText((FetchResult) item.getValue());
+
+		}
+
+		protected String getFetchResultText(FetchResult result) {
+			if (result == null) {
+				return UIText.MultiPullResultDialog_NothingFetchedStatus;
+			} else if (result.getTrackingRefUpdates()
+					.isEmpty()) {
+				return UIText.MultiPullResultDialog_NothingUpdatedStatus;
+			} else {
+				int updated = result.getTrackingRefUpdates()
+						.size();
+				if (updated == 1) {
+					return UIText.MultiPullResultDialog_UpdatedOneMessage;
+				}
+				return NLS.bind(UIText.MultiPullResultDialog_UpdatedMessage,
+						Integer.valueOf(updated));
+			}
+		}
+	}
+
+	private ColumnLabelProvider createOverallStatusLabelProvider() {
+		return skipMerge ? new ColumnLabelProvider()
+				: new PullOverallStatusLabelProvider();
+	}
+
+	private class PullOverallStatusLabelProvider extends ColumnLabelProvider {
+		@Override
+		public Image getImage(Object element) {
+			@SuppressWarnings("unchecked")
+			Entry<Repository, Object> item = (Entry<Repository, Object>) element;
+			Object resultOrError = item.getValue();
+			if (resultOrError instanceof IStatus) {
+				return PlatformUI.getWorkbench().getSharedImages()
+						.getImage(ISharedImages.IMG_ELCL_STOP);
+			}
+			PullResult res = (PullResult) item.getValue();
+			boolean success = res.isSuccessful();
+			if (!success) {
+				return PlatformUI.getWorkbench().getSharedImages()
+						.getImage(ISharedImages.IMG_ELCL_STOP);
+			}
+			return null;
+		}
+
+		@Override
+		public String getText(Object element) {
+			@SuppressWarnings("unchecked")
+			Entry<Repository, Object> item = (Entry<Repository, Object>) element;
+			if (item.getValue() instanceof IStatus) {
+				IStatus status = (IStatus) item.getValue();
+				return status.getMessage();
+			}
+			PullResult res = (PullResult) item.getValue();
+			if (res.isSuccessful()) {
+				return UIText.MultiPullResultDialog_OkStatus;
+			} else {
+				return UIText.MultiPullResultDialog_FailedStatus;
+			}
+		}
+	}
+
+	private ColumnLabelProvider createUpdateStatusProvider() {
+		return skipMerge ? new ColumnLabelProvider()
+				: new PullUpdateStatusLabelProvider();
+	}
+
+	private class PullUpdateStatusLabelProvider extends ColumnLabelProvider {
+		@Override
+		public String getText(Object element) {
+			@SuppressWarnings("unchecked")
+			Entry<Repository, Object> item = (Entry<Repository, Object>) element;
+			if (item.getValue() instanceof IStatus) {
+				return UIText.MultiPullResultDialog_UnknownStatus;
+			}
+			PullResult pullRes = (PullResult) item.getValue();
+			if (pullRes.getMergeResult() != null) {
+				return NLS.bind(
+						UIText.MultiPullResultDialog_MergeResultMessage,
+						MergeResultDialog.getStatusText(
+								pullRes.getMergeResult().getMergeStatus()));
+			} else if (pullRes.getRebaseResult() != null) {
+				RebaseResult res = pullRes.getRebaseResult();
+				return NLS.bind(
+						UIText.MultiPullResultDialog_RebaseResultMessage,
+						RebaseResultDialog.getStatusText(res.getStatus()));
+			} else {
+				return UIText.MultiPullResultDialog_NothingUpdatedStatus;
+			}
+		}
+	}
+	//
+	// private class FetchResultLabelProvider extends ColumnLabelProvider {
+	// @Override
+	// public String getText(Object element) {
+	// @SuppressWarnings("unchecked")
+	// Entry<Repository, Object> item = (Entry<Repository, Object>) element;
+	// if (item.getValue() instanceof IStatus) {
+	// return UIText.MultiPullResultDialog_UnknownStatus;
+	// }
+	// FetchResult fetchRes = (FetchResult) item.getValue();
+	// return fetchRes.getMessages();
+	// }
+	// }
 
 	@Override
 	protected void createButtonsForButtonBar(Composite parent) {

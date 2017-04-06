@@ -80,15 +80,9 @@ public class PullOperationUI extends JobChangeAdapter {
 	 * @param repositories
 	 */
 	public PullOperationUI(Set<Repository> repositories) {
-		this.repositories = repositories.toArray(new Repository[repositories
-				.size()]);
-		int timeout = Activator.getDefault().getPreferenceStore().getInt(
-				UIPreferences.REMOTE_CONNECTION_TIMEOUT);
-		pullOperation = new PullOperation(repositories, timeout);
-		pullOperation.setCredentialsProvider(new EGitCredentialsProvider());
-		for (Repository repository : repositories)
-			results.put(repository, NOT_TRIED_STATUS);
+		this(repositories, false);
 	}
+
 
 	/**
 	 * @param configs
@@ -103,6 +97,23 @@ public class PullOperationUI extends JobChangeAdapter {
 		for (Repository repository : repositories) {
 			results.put(repository, NOT_TRIED_STATUS);
 		}
+	}
+
+	/**
+	 * @param repositories
+	 * @param skipMergeOperation
+	 */
+	public PullOperationUI(Set<Repository> repositories,
+			boolean skipMergeOperation) {
+		this.repositories = repositories
+				.toArray(new Repository[repositories.size()]);
+		int timeout = Activator.getDefault().getPreferenceStore()
+				.getInt(UIPreferences.REMOTE_CONNECTION_TIMEOUT);
+		pullOperation = new PullOperation(repositories, timeout);
+		pullOperation.setSkipMerge(skipMergeOperation);
+		pullOperation.setCredentialsProvider(new EGitCredentialsProvider());
+		for (Repository repository : repositories)
+			results.put(repository, NOT_TRIED_STATUS);
 	}
 
 	/**
@@ -306,6 +317,7 @@ public class PullOperationUI extends JobChangeAdapter {
 							.getException(), true);
 			}
 		} else
-			new MultiPullResultDialog(shell, results).open();
+			new MultiPullResultDialog(shell, results,
+					pullOperation.getSkipMerge()).open();
 	}
 }

@@ -37,6 +37,7 @@ import org.eclipse.egit.core.internal.job.RuleUtil;
 import org.eclipse.egit.core.internal.util.ProjectUtil;
 import org.eclipse.jgit.annotations.NonNull;
 import org.eclipse.jgit.annotations.Nullable;
+import org.eclipse.jgit.api.FetchCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.MergeResult;
 import org.eclipse.jgit.api.MergeResult.MergeStatus;
@@ -54,6 +55,7 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.StoredConfig;
 import org.eclipse.jgit.merge.MergeStrategy;
 import org.eclipse.jgit.transport.CredentialsProvider;
+import org.eclipse.jgit.transport.FetchResult;
 import org.eclipse.osgi.util.NLS;
 
 /**
@@ -125,6 +127,8 @@ public class PullOperation implements IEGitOperation {
 
 	private CredentialsProvider credentialsProvider;
 
+	private boolean skipMergeOperation;
+
 	/**
 	 * @param repositories
 	 *            the repositories
@@ -172,33 +176,65 @@ public class PullOperation implements IEGitOperation {
 					Repository repository = repositories[i];
 					IProject[] validProjects = ProjectUtil.getValidOpenProjects(repository);
 					PullResult pullResult = null;
+					FetchResult fetchResult = null;
 					try (Git git = new Git(repository)) {
-						PullCommand pull = git.pull();
-						SubMonitor newChild = progress.newChild(1,
-								SubMonitor.SUPPRESS_NONE);
-						pull.setProgressMonitor(new EclipseGitProgressTransformer(
-										newChild));
-						pull.setTimeout(timeout);
-						pull.setCredentialsProvider(credentialsProvider);
-						PullReferenceConfig config = configs.get(repository);
-						newChild.setTaskName(
-								getPullTaskName(repository, config));
-						if (config != null) {
-							if (config.getRemote() != null) {
-								pull.setRemote(config.getRemote());
+						if(skipMergeOperation) {
+							FetchCommand fetch = git.fetch();
+							SubMonitor newChild = progress.newChild(1,
+									SubMonitor.SUPPRESS_NONE);
+							fetch.setProgressMonitor(new EclipseGitProgressTransformer(
+											newChild));
+							fetch.setTimeout(timeout);
+							fetch.setCredentialsProvider(credentialsProvider);
+							PullReferenceConfig config = configs.get(repository);
+							newChild.setTaskName(
+									getPullTaskName(repository, config));
+							if (config != null) {
+								if (config.getRemote() != null) {
+									fetch.setRemote(config.getRemote());
+								}
+//								if (config.getReference() != null) {
+//									fetch.setRemoteBranchName(config.getReference());
+//								}
+//								fetch.setRebase(config.getUpstreamConfig());
 							}
-							if (config.getReference() != null) {
-								pull.setRemoteBranchName(config.getReference());
+//							MergeStrategy strategy = Activator.getDefault()
+//									.getPreferredMergeStrategy();
+//							if (strategy != null) {
+//								fetch.setStrategy(strategy);
+//							}
+							fetchResult = fetch.call();
+							results.put(repository, fetchResult);
+						} else {
+							PullCommand pull = git.pull();
+							SubMonitor newChild = progress.newChild(1,
+									SubMonitor.SUPPRESS_NONE);
+							pull.setProgressMonitor(new EclipseGitProgressTransformer(
+											newChild));
+							pull.setTimeout(timeout);
+							pull.setCredentialsProvider(credentialsProvider);
+							PullReferenceConfig config = configs.get(repository);
+							newChild.setTaskName(
+									getPullTaskName(repository, config));
+							if (config != null) {
+								if (config.getRemote() != null) {
+									pull.setRemote(config.getRemote());
+								}
+								if (config.getReference() != null) {
+									pull.setRemoteBranchName(config.getReference());
+								}
+								pull.setRebase(config.getUpstreamConfig());
 							}
-							pull.setRebase(config.getUpstreamConfig());
+							MergeStrategy strategy = Activator.getDefault()
+									.getPreferredMergeStrategy();
+							if (strategy != null) {
+								pull.setStrategy(strategy);
+							}
+							pullResult = pull.call();
+							results.put(repository, pullResult);
 						}
-						MergeStrategy strategy = Activator.getDefault()
-								.getPreferredMergeStrategy();
-						if (strategy != null) {
-							pull.setStrategy(strategy);
-						}
-						pullResult = pull.call();
-						results.put(repository, pullResult);
+
+
 					} catch (DetachedHeadException e) {
 						results.put(repository, Activator.error(
 								CoreText.PullOperation_DetachedHeadMessage, e));
@@ -307,5 +343,20 @@ public class PullOperation implements IEGitOperation {
 	 */
 	public CredentialsProvider getCredentialsProvider() {
 		return credentialsProvider;
+	}
+
+	/**
+	 * @param skipMergeOperation
+	 */
+	public void setSkipMerge(boolean skipMergeOperation) {
+		this.skipMergeOperation = skipMergeOperation;
+
+	}
+
+	/**
+	 * @return should merge operation be skipped
+	 */
+	public boolean getSkipMerge() {
+		return this.skipMergeOperation;
 	}
 }
