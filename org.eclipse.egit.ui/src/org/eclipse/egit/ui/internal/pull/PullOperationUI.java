@@ -48,6 +48,7 @@ import org.eclipse.jgit.api.PullResult;
 import org.eclipse.jgit.api.RebaseResult;
 import org.eclipse.jgit.errors.TransportException;
 import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.transport.FetchResult;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.PlatformUI;
@@ -299,7 +300,10 @@ public class PullOperationUI extends JobChangeAdapter {
 			if (entry.getValue() instanceof PullResult)
 				new PullResultDialog(shell, entry.getKey(), (PullResult) entry
 						.getValue()).open();
-			else {
+			else if (entry.getValue() instanceof FetchResult) {
+				FetchResult result = (FetchResult) entry.getValue();
+				new PullResultDialog(shell, entry.getKey(), result).open();
+			} else {
 				IStatus status = (IStatus) entry.getValue();
 				if (status == NOT_TRIED_STATUS) {
 					MessageDialog

@@ -125,7 +125,8 @@ public class MultiPullResultDialog extends Dialog {
 				for (Object obj : sel.toList()) {
 					@SuppressWarnings("unchecked")
 					Entry<Repository, Object> entry = (Entry<Repository, Object>) obj;
-					enabled |= entry.getValue() instanceof PullResult;
+					enabled |= entry.getValue() instanceof PullResult
+							|| entry.getValue() instanceof FetchResult;
 				}
 				getButton(DETAIL_BUTTON).setEnabled(enabled);
 			}
@@ -340,68 +341,101 @@ public class MultiPullResultDialog extends Dialog {
 			for (Object obj : sel.toList()) {
 				@SuppressWarnings("unchecked")
 				Entry<Repository, Object> item = (Entry<Repository, Object>) obj;
-				if (item.getValue() instanceof PullResult) {
+				if (item.getValue() instanceof PullResult
+						|| item.getValue() instanceof FetchResult) {
 					final int x = xOffset;
 					final int y = yOffset;
 					xOffset += xDelta;
 					yOffset += yDelta;
 
-					final PullResultDialog dialog = new PullResultDialog(shell,
-							item.getKey(), (PullResult) item.getValue()) {
-						private Point initialLocation;
+					Object resultObject = item.getValue();
+					final PullResultDialog[] dialog = new PullResultDialog[1];
+					if(resultObject instanceof PullResult) {
+						dialog[0] = new CustomPullResultDialog(shell, dialogs,
+								item.getKey(), (PullResult) resultObject, x, y);
+					} else {
+						dialog[0] = new CustomPullResultDialog(shell, dialogs,
+								item.getKey(), (FetchResult) resultObject, x,
+								y);
 
-						@Override
-						protected Point getInitialLocation(Point initialSize) {
-							initialLocation = super
-									.getInitialLocation(initialSize);
-							initialLocation.x += x;
-							initialLocation.y += y;
-							return initialLocation;
-						}
+					}
 
-						@Override
-						public boolean close() {
-							// restore shell location if we moved it:
-							Shell resultShell = getShell();
-							if (resultShell != null
-									&& !resultShell.isDisposed()) {
-								Point location = resultShell.getLocation();
-								if (location.equals(initialLocation)) {
-									resultShell.setVisible(false);
-									resultShell.setLocation(location.x - x,
-											location.y - y);
-								}
-							}
-							boolean result = super.close();
-
-							// activate next result dialog (not the multi-result dialog):
-
-							// TODO: This doesn't work due to https://bugs.eclipse.org/388667 :
-//							Shell[] subShells = shell.getShells();
-//							if (subShells.length > 0) {
-//								subShells[subShells.length - 1].setActive();
-//							}
-
-							dialogs.remove(this);
-							if (dialogs.size() > 0)
-								dialogs.getLast().getShell().setActive();
-
-							return result;
-						}
-					};
-					dialog.create();
-					dialog.getShell().addShellListener(new ShellAdapter() {
+					dialog[0].create();
+					dialog[0].getShell().addShellListener(new ShellAdapter() {
 						@Override
 						public void shellActivated(org.eclipse.swt.events.ShellEvent e) {
-							dialogs.remove(dialog);
-							dialogs.add(dialog);
+							dialogs.remove(dialog[0]);
+							dialogs.add(dialog[0]);
 						}
 					});
-					dialog.open();
+					dialog[0].open();
 				}
 			}
 		}
 		super.buttonPressed(buttonId);
+	}
+
+	private class CustomPullResultDialog extends PullResultDialog {
+
+		private Point initialLocation;
+		private int x;
+		private int y;
+
+		private LinkedList<PullResultDialog> dialogs;
+
+		public CustomPullResultDialog(Shell shell,
+				LinkedList<PullResultDialog> dialogs, Repository key,
+				PullResult resultObject, int x, int y) {
+			super(shell, key, resultObject);
+			this.dialogs = dialogs;
+			this.x = x;
+			this.y = y;
+		}
+
+		public CustomPullResultDialog(Shell shell,
+				LinkedList<PullResultDialog> dialogs, Repository key,
+				FetchResult resultObject, int x, int y) {
+			super(shell, key, resultObject);
+			this.dialogs = dialogs;
+			this.x = x;
+			this.y = y;
+		}
+
+		@Override
+		protected Point getInitialLocation(Point initialSize) {
+			initialLocation = super.getInitialLocation(initialSize);
+			initialLocation.x += x;
+			initialLocation.y += y;
+			return initialLocation;
+		}
+
+		@Override
+		public boolean close() {
+			// restore shell location if we moved it:
+			Shell resultShell = getShell();
+			if (resultShell != null && !resultShell.isDisposed()) {
+				Point location = resultShell.getLocation();
+				if (location.equals(initialLocation)) {
+					resultShell.setVisible(false);
+					resultShell.setLocation(location.x - x, location.y - y);
+				}
+			}
+			boolean result = super.close();
+
+			// activate next result dialog (not the multi-result dialog):
+
+			// TODO: This doesn't work due to https://bugs.eclipse.org/388667 :
+			// Shell[] subShells = shell.getShells();
+			// if (subShells.length > 0) {
+			// subShells[subShells.length - 1].setActive();
+			// }
+
+			dialogs.remove(this);
+			if (dialogs.size() > 0)
+				dialogs.getLast().getShell().setActive();
+
+			return result;
+		}
 	}
 
 	@Override
